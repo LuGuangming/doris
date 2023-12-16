@@ -20,7 +20,6 @@ package org.apache.doris.nereids.rules.analysis;
 import org.apache.doris.nereids.rules.Rule;
 import org.apache.doris.nereids.rules.RuleType;
 import org.apache.doris.nereids.rules.rewrite.NormalizeToSlot;
-import org.apache.doris.nereids.rules.rewrite.NormalizeToSlot.NormalizeToSlotContext;
 import org.apache.doris.nereids.rules.rewrite.OneRewriteRuleFactory;
 import org.apache.doris.nereids.trees.expressions.Alias;
 import org.apache.doris.nereids.trees.expressions.Expression;
@@ -104,11 +103,13 @@ public class NormalizeAggregate extends OneRewriteRuleFactory implements Normali
 
             List<NamedExpression> aggregateOutput = aggregate.getOutputExpressions();
             Set<Alias> existsAlias = ExpressionUtils.mutableCollect(aggregateOutput, Alias.class::isInstance);
-            // we need push down subquery exprs in side non-distinct agg functions
-            Set<SubqueryExpr> subqueryExprs = ExpressionUtils.mutableCollect(
-                    Lists.newArrayList(ExpressionUtils.mutableCollect(aggregateOutput,
-                            expr -> expr instanceof AggregateFunction
-                                    && !((AggregateFunction) expr).isDistinct())),
+
+            List<AggregateFunction> aggFuncs = Lists.newArrayList();
+            aggregateOutput.forEach(o -> o.accept(CollectNonWindowedAggFuncs.INSTANCE, aggFuncs));
+
+            // we need push down subquery exprs inside non-window and non-distinct agg functions
+            Set<SubqueryExpr> subqueryExprs = ExpressionUtils.mutableCollect(aggFuncs.stream()
+                    .filter(aggFunc -> !aggFunc.isDistinct()).collect(Collectors.toList()),
                     SubqueryExpr.class::isInstance);
             Set<Expression> groupingByExprs = ImmutableSet.copyOf(aggregate.getGroupByExpressions());
             NormalizeToSlotContext bottomSlotContext =
@@ -116,8 +117,6 @@ public class NormalizeAggregate extends OneRewriteRuleFactory implements Normali
             Set<NamedExpression> bottomOutputs =
                     bottomSlotContext.pushDownToNamedExpression(Sets.union(groupingByExprs, subqueryExprs));
 
-            List<AggregateFunction> aggFuncs = Lists.newArrayList();
-            aggregateOutput.forEach(o -> o.accept(CollectNonWindowedAggFuncs.INSTANCE, aggFuncs));
             // use group by context to normalize agg functions to process
             //   sql like: select sum(a + 1) from t group by a + 1
             //

@@ -45,12 +45,18 @@ public:
     OlapScanLocalState(RuntimeState* state, OperatorXBase* parent)
             : ScanLocalState(state, parent) {}
 
-    TOlapScanNode& olap_scan_node();
+    TOlapScanNode& olap_scan_node() const;
+
+    std::string name_suffix() const override {
+        return fmt::format(" (id={}. table name = {})", std::to_string(_parent->node_id()),
+                           olap_scan_node().table_name);
+    }
 
 private:
     friend class vectorized::NewOlapScanner;
 
-    void set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
+    void set_scan_ranges(RuntimeState* state,
+                         const std::vector<TScanRangeParams>& scan_ranges) override;
     Status _init_profile() override;
     Status _process_conjuncts() override;
     bool _is_key_column(const std::string& col_name) override;
@@ -174,13 +180,15 @@ private:
     // total number of segment related to this scan node
     RuntimeProfile::Counter* _total_segment_counter = nullptr;
 
+    RuntimeProfile::Counter* _runtime_filter_info = nullptr;
+
     std::mutex _profile_mtx;
 };
 
 class OlapScanOperatorX final : public ScanOperatorX<OlapScanLocalState> {
 public:
     OlapScanOperatorX(ObjectPool* pool, const TPlanNode& tnode, int operator_id,
-                      const DescriptorTbl& descs);
+                      const DescriptorTbl& descs, int parallel_tasks);
 
 private:
     friend class OlapScanLocalState;
