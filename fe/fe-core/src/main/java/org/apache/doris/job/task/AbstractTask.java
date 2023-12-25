@@ -120,6 +120,7 @@ public abstract class AbstractTask implements Task {
             run();
             onSuccess();
         } catch (Exception e) {
+            this.errMsg = e.getMessage();
             onFail();
             log.warn("execute task error, job id is {}, task id is {}", jobId, taskId, e);
         }
@@ -132,6 +133,14 @@ public abstract class AbstractTask implements Task {
     public String getJobName() {
         AbstractJob job = Env.getCurrentEnv().getJobManager().getJob(jobId);
         return job == null ? "" : job.getJobName();
+    }
+
+    public Job getJobOrJobException() throws JobException {
+        AbstractJob job = Env.getCurrentEnv().getJobManager().getJob(jobId);
+        if (job == null) {
+            throw new JobException("job not exist, jobId:" + jobId);
+        }
+        return job;
     }
 
 }
