@@ -41,6 +41,7 @@
 #include "common/status.h"
 #include "io/fs/file_writer.h"
 #include "io/fs/local_file_system.h"
+#include "util/cpu_info.h"
 
 namespace doris::config {
 
@@ -228,7 +229,14 @@ DEFINE_Bool(doris_enable_scanner_thread_pool_per_disk, "true");
 DEFINE_mInt64(doris_blocking_priority_queue_wait_timeout_ms, "500");
 // number of scanner thread pool size for olap table
 // and the min thread num of remote scanner thread pool
-DEFINE_Int32(doris_scanner_thread_pool_thread_num, "48");
+DEFINE_Int32(doris_scanner_thread_pool_thread_num, "-1");
+DEFINE_Validator(doris_scanner_thread_pool_thread_num, [](const int config) -> bool {
+    if (config == -1) {
+        CpuInfo::init();
+        doris_scanner_thread_pool_thread_num = std::max(48, CpuInfo::num_cores() * 4);
+    }
+    return true;
+});
 DEFINE_Int32(doris_max_remote_scanner_thread_pool_thread_num, "-1");
 // number of olap scanner thread pool queue size
 DEFINE_Int32(doris_scanner_thread_pool_queue_size, "102400");
@@ -864,6 +872,8 @@ DEFINE_mInt32(parquet_rowgroup_max_buffer_mb, "128");
 // Max buffer size for parquet chunk column
 DEFINE_mInt32(parquet_column_max_buffer_mb, "8");
 DEFINE_mDouble(max_amplified_read_ratio, "0.8");
+DEFINE_mInt32(merged_oss_min_io_size, "1048576");
+DEFINE_mInt32(merged_hdfs_min_io_size, "8192");
 
 // OrcReader
 DEFINE_mInt32(orc_natural_read_size_mb, "8");
@@ -959,7 +969,7 @@ DEFINE_mInt64(workload_group_scan_task_wait_timeout_ms, "10000");
 DEFINE_Bool(enable_index_apply_preds_except_leafnode_of_andnode, "true");
 
 DEFINE_mBool(variant_enable_flatten_nested, "false");
-DEFINE_mDouble(variant_ratio_of_defaults_as_sparse_column, "0.95");
+DEFINE_mDouble(variant_ratio_of_defaults_as_sparse_column, "1");
 DEFINE_mInt64(variant_threshold_rows_to_estimate_sparse_column, "1000");
 
 // block file cache
@@ -1100,7 +1110,7 @@ DEFINE_Int32(group_commit_memory_rows_for_max_filter_ratio, "10000");
 DEFINE_Bool(wait_internal_group_commit_finish, "false");
 
 DEFINE_mInt32(scan_thread_nice_value, "0");
-DEFINE_mInt32(tablet_schema_cache_recycle_interval, "86400");
+DEFINE_mInt32(tablet_schema_cache_recycle_interval, "3600");
 
 DEFINE_Bool(exit_on_exception, "false");
 // This config controls whether the s3 file writer would flush cache asynchronously
