@@ -79,9 +79,9 @@ public class BrokerLoadJob extends BulkLoadJob {
     private static final Logger LOG = LogManager.getLogger(BrokerLoadJob.class);
 
     // Profile of this load job, including all tasks' profiles
-    private Profile jobProfile;
+    protected Profile jobProfile;
     // If set to true, the profile of load job with be pushed to ProfileManager
-    private boolean enableProfile = false;
+    protected boolean enableProfile = false;
 
     private boolean enableMemTableOnSinkNode = false;
 
@@ -193,12 +193,32 @@ public class BrokerLoadJob extends BulkLoadJob {
         loadStartTimestamp = System.currentTimeMillis();
     }
 
+    protected LoadLoadingTask createTask(Database db, OlapTable table, List<BrokerFileGroup> brokerFileGroups,
+            boolean isEnableMemtableOnSinkNode, FileGroupAggKey aggKey, BrokerPendingTaskAttachment attachment)
+            throws UserException {
+        LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
+                brokerFileGroups, getDeadlineMs(), getExecMemLimit(),
+                isStrictMode(), isPartialUpdate(), transactionId, this, getTimeZone(), getTimeout(),
+                getLoadParallelism(), getSendBatchParallelism(),
+                getMaxFilterRatio() <= 0, enableProfile ? jobProfile : null, isSingleTabletLoadPerSink(),
+                useNewLoadScanNode(), getPriority(), isEnableMemtableOnSinkNode);
+
+        UUID uuid = UUID.randomUUID();
+        TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        task.init(loadId, attachment.getFileStatusByTable(aggKey),
+                attachment.getFileNumByTable(aggKey), getUserInfo());
+        task.settWorkloadGroups(tWorkloadGroups);
+        return task;
+    }
+
     private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws UserException {
         List<Table> tableList = db.getTablesOnIdOrderOrThrowException(
                 Lists.newArrayList(fileGroupAggInfo.getAllTableIds()));
         // divide job into broker loading task by table
         List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
-        this.jobProfile = new Profile("BrokerLoadJob " + id + ". " + label, true);
+        if (enableProfile) {
+            this.jobProfile = new Profile("BrokerLoadJob " + id + ". " + label, true);
+        }
         ProgressManager progressManager = Env.getCurrentProgressManager();
         progressManager.registerProgressSimple(String.valueOf(id));
         MetaLockUtils.readLockTables(tableList);
@@ -212,17 +232,8 @@ public class BrokerLoadJob extends BulkLoadJob {
                 boolean isEnableMemtableOnSinkNode = ((OlapTable) table).getTableProperty().getUseSchemaLightChange()
                         ? this.enableMemTableOnSinkNode : false;
                 // Generate loading task and init the plan of task
-                LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
-                        brokerFileGroups, getDeadlineMs(), getExecMemLimit(),
-                        isStrictMode(), isPartialUpdate(), transactionId, this, getTimeZone(), getTimeout(),
-                        getLoadParallelism(), getSendBatchParallelism(),
-                        getMaxFilterRatio() <= 0, enableProfile ? jobProfile : null, isSingleTabletLoadPerSink(),
-                        useNewLoadScanNode(), getPriority(), isEnableMemtableOnSinkNode);
-
-                UUID uuid = UUID.randomUUID();
-                TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-                task.init(loadId, attachment.getFileStatusByTable(aggKey),
-                        attachment.getFileNumByTable(aggKey), getUserInfo());
+                LoadLoadingTask task = createTask(db, table, brokerFileGroups,
+                        isEnableMemtableOnSinkNode, aggKey, attachment);
                 idToTasks.put(task.getSignature(), task);
                 // idToTasks contains previous LoadPendingTasks, so idToTasks is just used to save all tasks.
                 // use newLoadingTasks to save new created loading tasks and submit them later.
@@ -332,6 +343,8 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
         jobProfile.update(createTimestamp, getSummaryInfo(true), true,
                 Integer.valueOf(sessionVariables.getOrDefault(SessionVariable.PROFILE_LEVEL, "3")), null, false);
+        // jobProfile has been pushed into ProfileManager, remove reference in brokerLoadJob
+        jobProfile = null;
     }
 
     private Map<String, String> getSummaryInfo(boolean isFinished) {

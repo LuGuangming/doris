@@ -23,9 +23,13 @@
 #include <gen_cpp/internal_service.pb.h>
 #include <stdlib.h>
 
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
+#include "cloud/cloud_tablet.h"
+#include "cloud/config.h"
+#include "common/status.h"
 #include "gutil/integral_types.h"
 #include "olap/lru_cache.h"
 #include "olap/olap_tuple.h"
@@ -56,21 +60,22 @@ Status Reusable::init(const TDescriptorTable& t_desc_tbl, const std::vector<TExp
     RETURN_IF_ERROR(DescriptorTbl::create(_runtime_state->obj_pool(), t_desc_tbl, &_desc_tbl));
     _runtime_state->set_desc_tbl(_desc_tbl);
     _block_pool.resize(block_size);
-    for (int i = 0; i < _block_pool.size(); ++i) {
-        _block_pool[i] = vectorized::Block::create_unique(tuple_desc()->slots(), 2);
+    for (auto& i : _block_pool) {
+        i = vectorized::Block::create_unique(tuple_desc()->slots(), 2);
         // Name is useless but cost space
-        _block_pool[i]->clear_names();
+        i->clear_names();
     }
 
     RETURN_IF_ERROR(vectorized::VExpr::create_expr_trees(output_exprs, _output_exprs_ctxs));
     RowDescriptor row_desc(tuple_desc(), false);
     // Prepare the exprs to run.
     RETURN_IF_ERROR(vectorized::VExpr::prepare(_output_exprs_ctxs, _runtime_state.get(), row_desc));
+    RETURN_IF_ERROR(vectorized::VExpr::open(_output_exprs_ctxs, _runtime_state.get()));
     _create_timestamp = butil::gettimeofday_ms();
     _data_type_serdes = vectorized::create_data_type_serdes(tuple_desc()->slots());
     _col_default_values.resize(tuple_desc()->slots().size());
     for (int i = 0; i < tuple_desc()->slots().size(); ++i) {
-        auto slot = tuple_desc()->slots()[i];
+        auto* slot = tuple_desc()->slots()[i];
         _col_uid_to_idx[slot->col_unique_id()] = i;
         _col_default_values[i] = slot->col_default_value();
     }
@@ -189,11 +194,9 @@ Status PointQueryExecutor::init(const PTabletKeyLookupRequest* request,
             RETURN_IF_ERROR(reusable_ptr->init(t_desc_tbl, t_output_exprs.exprs, 1));
         }
     }
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request->tablet_id());
-    if (_tablet == nullptr) {
-        LOG(WARNING) << "failed to do tablet_fetch_data. tablet [" << request->tablet_id()
-                     << "] is not exist";
-        return Status::NotFound(fmt::format("tablet {} not exist", request->tablet_id()));
+    _tablet = DORIS_TRY(ExecEnv::get_tablet(request->tablet_id()));
+    if (request->has_version() && request->version() >= 0) {
+        _version = request->version();
     }
     RETURN_IF_ERROR(_init_keys(request));
     _result_block = _reusable->get_block();
@@ -263,6 +266,10 @@ Status PointQueryExecutor::_lookup_row_key() {
     SCOPED_TIMER(&_profile_metrics.lookup_key_ns);
     // 2. lookup row location
     Status st;
+    if (_version >= 0) {
+        CHECK(config::is_cloud_mode()) << "Only cloud mode support snapshot read at present";
+        RETURN_IF_ERROR(std::dynamic_pointer_cast<CloudTablet>(_tablet)->sync_rowsets(_version));
+    }
     std::vector<RowsetSharedPtr> specified_rowsets;
     {
         std::shared_lock rlock(_tablet->get_header_lock());

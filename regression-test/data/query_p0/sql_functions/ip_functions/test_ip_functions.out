@@ -20,7 +20,25 @@
 0
 
 -- !sql --
+2130706433
+
+-- !sql --
+0
+
+-- !sql --
+0
+
+-- !sql --
 3232235521
+
+-- !sql --
+\N
+
+-- !sql --
+\N
+
+-- !sql --
+\N
 
 -- !sql --
 \N
@@ -140,19 +158,13 @@ AAAAAAAAFFFFFFFFFFFFFFFFAAAAAAAA
 2A0206B8000000000000000000000011
 
 -- !sql --
-true
+\N
 
 -- !sql --
-false
+\N
 
 -- !sql --
-false
-
--- !sql --
-true
-
--- !sql --
-false
+\N
 
 -- !sql --
 true
@@ -161,6 +173,9 @@ true
 false
 
 -- !sql --
+false
+
+-- !sql --
 true
 
 -- !sql --
@@ -168,3 +183,48 @@ false
 
 -- !sql --
 true
+
+-- !sql --
+\N
+
+-- !sql --
+\N
+
+-- !sql --
+\N
+
+-- !sql --
+false
+
+-- !sql --
+true
+
+-- !sql --
+false
+
+-- !sql --
+true
+
+-- !sql --
+\N
+
+-- !sql --
+\N
+
+-- !sql --
+\N
+
+-- !sql --
+::ffff:192.168.0.1
+
+-- !sql --
+::ffff:10.0.5.9
+
+-- !sql --
+::ffff:192.168.0.1
+
+-- !sql --
+::
+
+-- !sql --
+ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff

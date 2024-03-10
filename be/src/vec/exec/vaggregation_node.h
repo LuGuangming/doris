@@ -437,6 +437,7 @@ protected:
     RuntimeProfile::Counter* _hash_table_emplace_timer = nullptr;
     RuntimeProfile::Counter* _hash_table_input_counter = nullptr;
     RuntimeProfile::Counter* _expr_timer = nullptr;
+    RuntimeProfile::Counter* _insert_keys_to_column_timer = nullptr;
 
 private:
     friend class pipeline::AggSinkOperator;
@@ -479,7 +480,6 @@ private:
     RuntimeProfile::Counter* _serialize_result_timer = nullptr;
     RuntimeProfile::Counter* _deserialize_data_timer = nullptr;
     RuntimeProfile::Counter* _hash_table_iterate_timer = nullptr;
-    RuntimeProfile::Counter* _insert_keys_to_column_timer = nullptr;
     RuntimeProfile::Counter* _streaming_agg_timer = nullptr;
     RuntimeProfile::Counter* _hash_table_size_counter = nullptr;
     RuntimeProfile::Counter* _max_row_size_counter = nullptr;
@@ -505,7 +505,7 @@ private:
     size_t _get_hash_table_size();
 
     Status _create_agg_status(AggregateDataPtr data);
-    Status _destroy_agg_status(AggregateDataPtr data);
+    void _destroy_agg_status(AggregateDataPtr data);
 
     Status _get_without_key_result(RuntimeState* state, Block* block, bool* eos);
     Status _serialize_without_key(RuntimeState* state, Block* block, bool* eos);
